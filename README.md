@@ -4,6 +4,30 @@
 
 This is a comprehensive **Python-based GUI application** designed for **network security analysis** and **cybersecurity threat detection**. The tool combines traditional network analysis techniques with cutting-edge AI-powered threat intelligence to provide deep insights into network traffic patterns, VPN usage, and potential security threats.
 
+<!-- 🚫 API Key Warning Section -->
+<p align="center">
+  <img src="https://img.shields.io/badge/🛑%20STOP-READ%20THIS%20BEFORE%20USING-red?style=for-the-badge" alt="STOP Warning">
+</p>
+
+![WARNING](https://img.shields.io/badge/⚠️%20WARNING-API%20KEY%20USAGE%20POLICY-critical?style=for-the-badge)
+
+> ## ⚠️ **Important: API Key Usage Policy**
+> 
+> **You must replace the placeholder API keys in this project with your own.**  
+> Do **not** use my API keys or any keys belonging to others.
+>
+> Unauthorized usage of someone else’s API keys can:
+> - Violate the service provider’s **Terms of Service**  
+> - Lead to **account suspension** or permanent bans  
+> - Result in **legal action** under applicable laws  
+>   - *Information Technology Act, 2000* (India)  
+>   - *Computer Fraud and Abuse Act (CFAA)* (U.S.)  
+>   - Other cybersecurity and data protection laws worldwide
+> - Cause **financial loss** if tied to paid services
+>
+> **You are fully responsible** for securing your own credentials and ensuring compliance with all relevant laws and agreements.
+
+
 ---
 
 ## 🎯 **Core Purpose**
