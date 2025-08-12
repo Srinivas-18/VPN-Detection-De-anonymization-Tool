@@ -448,7 +448,6 @@ google-generativeai>=0.3.0
 - **IPGeolocation**: Geographic mapping services
 
 ---
----
 
 ## 👨‍💻 Developed By
 
