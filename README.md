@@ -448,6 +448,17 @@ google-generativeai>=0.3.0
 - **IPGeolocation**: Geographic mapping services
 
 ---
+---
+
+## 👨‍💻 Developed By
+
+**Varigonda Lakshmi Srinivas**  
+Final Year B.Tech Project  
+🔗 [GitHub Profile](https://github.com/Srinivas-18)
+
+---
+
+## 🌟 If you found this useful, leave a ⭐ on GitHub!
 
 This project represents a **comprehensive cybersecurity analysis platform** that combines traditional network analysis techniques with modern AI-powered intelligence, providing security professionals with powerful tools for threat detection, analysis, and reporting. 🚀
 
