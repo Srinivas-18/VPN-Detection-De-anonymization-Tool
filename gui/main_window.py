@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from core.packet_processor import extract_ips_from_pcap
+from core.packet_processor import extract_ips_from_pcap, analyze_packet_details
 from core.vpn_checker import check_vpn_status
-from utils.report_writer import save_report, save_full_report
+from utils.report_writer import save_report, save_full_report, save_comprehensive_excel_report
 from deanon.fingerprint_extractor import extract_fingerprints
 from deanon.deanonymizer import classify_fingerprint
 from analysis.geo_locator import get_geo_info
@@ -96,6 +96,66 @@ def launch_gui():
 
 
             messagebox.showinfo("Saved", f"Full report saved to {file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", str(e))
+
+    def save_comprehensive_excel():
+        if not hasattr(app, "results"):
+            messagebox.showwarning("No Data", "Analyze a file first.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+        )
+
+        if not isinstance(file_path, str) or file_path.strip() == "":
+            messagebox.showerror("Error", "Invalid file path.")
+            return
+
+        try:
+            # Prepare data for comprehensive report
+            deanonym_results = []
+            geo_data = {}
+            mac_data = {}
+            payload_data = {}
+            ai_analysis = {}
+            packet_analysis = {}
+            
+            # Get existing analysis data
+            if hasattr(app, "full_analysis"):
+                deanonym_results = [(ip, data.get("Fingerprint", "")) for ip, data in app.full_analysis.items() if "Fingerprint" in data]
+                geo_data = {ip: {
+                    "country": data.get("Country", ""),
+                    "city": data.get("City", ""),
+                    "isp": data.get("ISP", "")
+                } for ip, data in app.full_analysis.items() if any(k in data for k in ["Country", "City", "ISP"])}
+                mac_data = {ip: data.get("MAC") for ip, data in app.full_analysis.items() if "MAC" in data}
+                payload_data = {ip: str(data.get("Payload", "")) for ip, data in app.full_analysis.items() if "Payload" in data}
+            
+            # Get AI analysis data if available
+            if hasattr(app, "ai_analysis_results"):
+                ai_analysis = app.ai_analysis_results
+            
+            # Get packet analysis data if available
+            if hasattr(app, "packet_analysis_results"):
+                packet_analysis = app.packet_analysis_results
+            
+            # Create comprehensive Excel report
+            save_comprehensive_excel_report(
+                file_path,
+                app.results,
+                app.total_packets,
+                app.timestamp,
+                deanonym_results=deanonym_results,
+                geo_data=geo_data,
+                mac_data=mac_data,
+                payload_data=payload_data,
+                ai_analysis=ai_analysis,
+                packet_analysis=packet_analysis
+            )
+
+            messagebox.showinfo("Saved", f"Comprehensive Excel report saved to {file_path}")
         except Exception as e:
             messagebox.showerror("Export Error", str(e))
 
@@ -233,6 +293,30 @@ def launch_gui():
                     app.after(0, lambda: progress_label.config(text=f"❌ Payload inspection failed: {str(e)}"))
             threading.Thread(target=worker, daemon=True).start()
 
+        def run_detailed_analysis():
+            popup.destroy()
+            progress_label.config(text="📊 Running Detailed Packet Analysis...")
+            def worker():
+                try:
+                    app.after(0, lambda: progress_label.config(text="📊 Analyzing packet protocols, websites, and potential passwords..."))
+                    
+                    packet_analysis = analyze_packet_details(app.file_path)
+                    
+                    if "error" in packet_analysis:
+                        app.after(0, lambda: progress_label.config(text=f"❌ Detailed analysis failed: {packet_analysis['error']}"))
+                        return
+                    
+                    # Store packet analysis results for comprehensive report
+                    app.packet_analysis_results = packet_analysis
+                    
+                    app.after(0, lambda: progress_label.config(text="✅ Detailed packet analysis complete"))
+                    app.after(0, lambda: show_detailed_analysis_popup(packet_analysis))
+                    
+                except Exception as e:
+                    app.after(0, lambda: progress_label.config(text=f"❌ Detailed analysis failed: {str(e)}"))
+            
+            threading.Thread(target=worker, daemon=True).start()
+
         def run_ai_analysis(ai_analyzer):
             popup.destroy()
             progress_label.config(text="🤖 Running AI Threat Analysis...")
@@ -260,6 +344,13 @@ def launch_gui():
                     app.after(0, lambda: progress_label.config(text="🤖 Generating comprehensive threat report..."))
                     threat_report = ai_analyzer.generate_threat_report(app.full_analysis, payload_data)
                     
+                    # Store AI analysis results for comprehensive report
+                    app.ai_analysis_results = {
+                        "network_analysis": network_analysis,
+                        "payload_analysis": payload_analysis,
+                        "threat_report": threat_report
+                    }
+                    
                     # Show results
                     app.after(0, lambda: progress_label.config(text="✅ AI Threat Analysis complete"))
                     app.after(0, lambda: show_ai_analysis_popup(network_analysis, payload_analysis, threat_report))
@@ -272,6 +363,7 @@ def launch_gui():
         tk.Button(popup, text="🌐 Geolocation", command=run_geo, bg="#3a3a5c", fg="white", width=25).pack(pady=10)
         tk.Button(popup, text="🔍 MAC Address Lookup", command=run_mac, bg="#3a3a5c", fg="white", width=25).pack(pady=10)
         tk.Button(popup, text="📦 Payload Inspection", command=run_payload, bg="#3a3a5c", fg="white", width=25).pack(pady=10)
+        tk.Button(popup, text="📊 Detailed Packet Analysis", command=run_detailed_analysis, bg="#4CAF50", fg="white", width=25).pack(pady=10)
         
         # Add AI Analysis button if API key is available
         ai_analyzer = get_ai_analyzer()
@@ -512,6 +604,132 @@ def launch_gui():
         # Close button
         tk.Button(popup, text="Close", command=popup.destroy, bg="#3a3a5c", fg="white").pack(pady=10)
 
+    def show_detailed_analysis_popup(analysis_data):
+        popup = tk.Toplevel(app)
+        popup.title("📊 Detailed Packet Analysis Results")
+        popup.geometry("1000x800")
+        popup.configure(bg="#1e1e2f")
+
+        # Title
+        tk.Label(popup, text="📊 Detailed Packet Analysis Results", font=("Helvetica", 16, "bold"), 
+                fg="white", bg="#1e1e2f").pack(pady=10)
+
+        # Create notebook for tabs
+        notebook = ttk.Notebook(popup)
+        notebook.pack(padx=20, pady=10, fill="both", expand=True)
+
+        # Tab 1: Protocol Statistics
+        tab1 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab1, text="Protocol Stats")
+        
+        protocol_text = tk.Text(tab1, bg="#2a2a3a", fg="lightgreen", font=("Courier", 10), wrap="word")
+        protocol_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display protocol statistics
+        protocol_text.insert("end", "📊 PROTOCOL STATISTICS\n")
+        protocol_text.insert("end", "=" * 50 + "\n\n")
+        protocol_text.insert("end", f"Total Packets: {analysis_data.get('total_packets', 0):,}\n")
+        protocol_text.insert("end", f"Average Packet Size: {analysis_data.get('avg_packet_size', 0):.1f} bytes\n\n")
+        
+        protocol_text.insert("end", "🔍 Protocol Distribution:\n")
+        for protocol, count in analysis_data.get('protocol_stats', {}).items():
+            percentage = (count / analysis_data.get('total_packets', 1)) * 100
+            protocol_text.insert("end", f"  • {protocol}: {count:,} packets ({percentage:.1f}%)\n")
+        
+        protocol_text.insert("end", "\n🔍 Top Ports Used:\n")
+        for port_info, count in analysis_data.get('top_ports', {}).items():
+            protocol_text.insert("end", f"  • {port_info}: {count:,} packets\n")
+
+        # Tab 2: Website Access
+        tab2 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab2, text="Website Access")
+        
+        website_text = tk.Text(tab2, bg="#2a2a3a", fg="lightblue", font=("Courier", 10), wrap="word")
+        website_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display website access
+        website_text.insert("end", "🌐 WEBSITE ACCESS ANALYSIS\n")
+        website_text.insert("end", "=" * 50 + "\n\n")
+        
+        websites = analysis_data.get('top_websites', {})
+        if websites:
+            website_text.insert("end", "🔍 Most Accessed Websites:\n")
+            for website, count in websites.items():
+                website_text.insert("end", f"  • {website}: {count} queries\n")
+        else:
+            website_text.insert("end", "No website access detected in this capture.\n")
+        
+        website_text.insert("end", "\n🔍 DNS Queries:\n")
+        for query in analysis_data.get('dns_queries', [])[:20]:  # Show first 20
+            website_text.insert("end", f"  • {query['src_ip']} → {query['query']}\n")
+
+        # Tab 3: Potential Passwords
+        tab3 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab3, text="Password Detection")
+        
+        password_text = tk.Text(tab3, bg="#2a2a3a", fg="red", font=("Courier", 10), wrap="word")
+        password_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display potential passwords
+        password_text.insert("end", "🔐 POTENTIAL PASSWORD DETECTION\n")
+        password_text.insert("end", "=" * 50 + "\n\n")
+        
+        passwords = analysis_data.get('potential_passwords', [])
+        if passwords:
+            password_text.insert("end", f"⚠️ Found {len(passwords)} potential password fields!\n\n")
+            for pwd in passwords:
+                password_text.insert("end", f"🔍 Type: {pwd['type']}\n")
+                password_text.insert("end", f"   Source IP: {pwd['src_ip']}\n")
+                password_text.insert("end", f"   Destination IP: {pwd['dst_ip']}\n")
+                password_text.insert("end", f"   Field: {pwd['field']}\n")
+                password_text.insert("end", f"   Value: {pwd['value']}\n")
+                password_text.insert("end", "-" * 40 + "\n")
+        else:
+            password_text.insert("end", "✅ No potential passwords detected in this capture.\n")
+
+        # Tab 4: Suspicious Activity
+        tab4 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab4, text="Suspicious Activity")
+        
+        suspicious_text = tk.Text(tab4, bg="#2a2a3a", fg="orange", font=("Courier", 10), wrap="word")
+        suspicious_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display suspicious activity
+        suspicious_text.insert("end", "🚨 SUSPICIOUS ACTIVITY DETECTION\n")
+        suspicious_text.insert("end", "=" * 50 + "\n\n")
+        
+        suspicious = analysis_data.get('suspicious_activity', [])
+        if suspicious:
+            for activity in suspicious:
+                color = "🔴" if activity['severity'] == 'High' else "🟡" if activity['severity'] == 'Medium' else "🟢"
+                suspicious_text.insert("end", f"{color} {activity['type']} ({activity['severity']})\n")
+                suspicious_text.insert("end", f"   Details: {activity['details']}\n")
+                suspicious_text.insert("end", "-" * 40 + "\n")
+        else:
+            suspicious_text.insert("end", "✅ No suspicious activity detected.\n")
+
+        # Tab 5: Connection Analysis
+        tab5 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab5, text="Connections")
+        
+        connection_text = tk.Text(tab5, bg="#2a2a3a", fg="cyan", font=("Courier", 10), wrap="word")
+        connection_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display connection analysis
+        connection_text.insert("end", "🔗 CONNECTION ANALYSIS\n")
+        connection_text.insert("end", "=" * 50 + "\n\n")
+        
+        connections = analysis_data.get('top_connections', {})
+        if connections:
+            connection_text.insert("end", "🔍 Most Frequent Connections:\n")
+            for connection, count in connections.items():
+                connection_text.insert("end", f"  • {connection}: {count} packets\n")
+        else:
+            connection_text.insert("end", "No connection data available.\n")
+
+        # Close button
+        tk.Button(popup, text="Close", command=popup.destroy, bg="#3a3a5c", fg="white").pack(pady=10)
+
     # === GUI Init ===
     app = tk.Tk()
     app.title("🛡️ VPN Detection & De-anonymization")
@@ -547,6 +765,7 @@ def launch_gui():
     tk.Button(btn_frame, text="🧠 De-anonymize VPN IPs", command=run_deanonymization, bg="#3a3a5c", fg="white").grid(row=0, column=2, padx=5)
     tk.Button(btn_frame, text="⚙️ Advanced Analysis", command=open_advanced_analysis, bg="#3a3a5c", fg="white").grid(row=0, column=3, padx=5)
     tk.Button(btn_frame, text="📁 Export Full Report", command=save_full_csv, bg="#3a3a5c", fg="white").grid(row=0, column=4, padx=5)
+    tk.Button(btn_frame, text="📊 Export Excel Report", command=save_comprehensive_excel, bg="#4CAF50", fg="white").grid(row=0, column=5, padx=5)
 
     tk.Label(app, text="De-anonymization Results", fg="white", bg="#1e1e2f", font=("Helvetica", 14)).pack(pady=(20, 5))
     deanonym_tree = ttk.Treeview(app, columns=("IP", "Fingerprint"), show="headings", height=8)

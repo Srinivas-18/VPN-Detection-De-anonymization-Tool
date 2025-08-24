@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import json
 import os
+import re
 from typing import Dict, List, Optional
 
 class AIAnalyzer:
@@ -23,6 +24,50 @@ class AIAnalyzer:
                     self.model = genai.GenerativeModel('gemini-pro')
                 except Exception as e:
                     raise ValueError(f"Could not initialize any Gemini model. Error: {str(e)}")
+    
+    def _extract_json_from_response(self, response_text: str) -> Dict:
+        """Extract JSON from AI response, handling various response formats"""
+        if not response_text or not response_text.strip():
+            return {
+                "error": "Empty response from AI model",
+                "status": "empty_response"
+            }
+        
+        try:
+            # First try to parse as direct JSON
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            # Try to extract JSON from markdown code blocks
+            json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(1))
+                except json.JSONDecodeError:
+                    pass
+            
+            # Try to extract JSON from code blocks without language specifier
+            json_match = re.search(r'```\s*(.*?)\s*```', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(1))
+                except json.JSONDecodeError:
+                    pass
+            
+            # Try to find JSON-like structure in the text
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(0))
+                except json.JSONDecodeError:
+                    pass
+            
+            # If all else fails, create a structured response from the text
+            return {
+                "analysis": "AI analysis completed but response format was unexpected",
+                "raw_response": response_text[:500] + "..." if len(response_text) > 500 else response_text,
+                "status": "parsed_from_text",
+                "note": "This is a fallback response due to unexpected AI output format"
+            }
         
     def analyze_payload_intelligence(self, payload_data: Dict[str, str]) -> Dict[str, str]:
         """Analyze payload data using AI to identify threats and patterns"""
@@ -36,13 +81,15 @@ class AIAnalyzer:
             if not payload_summary:
                 return {"analysis": "No meaningful payload data found for AI analysis"}
             
-            # Create AI prompt
+            # Create AI prompt with stronger JSON formatting instructions
             prompt = f"""
-            Analyze these network packet payloads for security threats and patterns:
+            Analyze these network packet payloads for security threats and patterns.
             
-            {chr(10).join(payload_summary[:20])}  # Limit to first 20 for API efficiency
+            Payload Data:
+            {chr(10).join(payload_summary[:20])}
             
-            Provide analysis in JSON format with the following structure:
+            IMPORTANT: Respond ONLY with valid JSON in the exact format specified below. Do not include any other text.
+            
             {{
                 "threat_level": "low/medium/high",
                 "threats_detected": ["list of specific threats"],
@@ -61,7 +108,9 @@ class AIAnalyzer:
             """
             
             response = self.model.generate_content(prompt)
-            return json.loads(response.text)
+            if not response or not response.text:
+                return {"error": "No response received from AI model"}
+            return self._extract_json_from_response(response.text)
             
         except Exception as e:
             return {"error": f"AI analysis failed: {str(e)}"}
@@ -74,16 +123,17 @@ class AIAnalyzer:
             total_ips = len(analysis_data)
             countries = set(data.get("Country", "") for data in analysis_data.values() if data.get("Country"))
             
-            # Create AI prompt
+            # Create AI prompt with stronger JSON formatting instructions
             prompt = f"""
-            Analyze this network traffic data for security insights:
+            Analyze this network traffic data for security insights.
             
             Network Summary:
             - Total IPs: {total_ips}
             - VPN IPs: {vpn_count}
             - Countries: {len(countries)} ({', '.join(list(countries)[:10])})
             
-            Provide analysis in JSON format:
+            IMPORTANT: Respond ONLY with valid JSON in the exact format specified below. Do not include any other text.
+            
             {{
                 "risk_assessment": "low/medium/high",
                 "anomalies_detected": ["list of anomalies"],
@@ -102,7 +152,9 @@ class AIAnalyzer:
             """
             
             response = self.model.generate_content(prompt)
-            return json.loads(response.text)
+            if not response or not response.text:
+                return {"error": "No response received from AI model"}
+            return self._extract_json_from_response(response.text)
             
         except Exception as e:
             return {"error": f"Network behavior analysis failed: {str(e)}"}
@@ -119,7 +171,7 @@ class AIAnalyzer:
             }
             
             prompt = f"""
-            Generate a comprehensive cybersecurity threat report based on this network analysis:
+            Generate a comprehensive cybersecurity threat report based on this network analysis.
             
             Analysis Summary:
             {json.dumps(summary, indent=2)}
@@ -136,6 +188,8 @@ class AIAnalyzer:
             """
             
             response = self.model.generate_content(prompt)
+            if not response or not response.text:
+                return "Error: No response received from AI model"
             return response.text
             
         except Exception as e:
@@ -145,7 +199,7 @@ class AIAnalyzer:
         """Analyze a specific IP address for threats"""
         try:
             prompt = f"""
-            Analyze this IP address for security threats:
+            Analyze this IP address for security threats.
             
             IP: {ip}
             VPN Status: {ip_data.get('VPN Status', 'Unknown')}
@@ -155,7 +209,8 @@ class AIAnalyzer:
             MAC: {ip_data.get('MAC Address', 'Unknown')}
             Fingerprint: {ip_data.get('Fingerprint Info', 'Unknown')}
             
-            Provide analysis in JSON format:
+            IMPORTANT: Respond ONLY with valid JSON in the exact format specified below. Do not include any other text.
+            
             {{
                 "threat_level": "low/medium/high",
                 "risk_factors": ["list of risk factors"],
@@ -167,7 +222,9 @@ class AIAnalyzer:
             """
             
             response = self.model.generate_content(prompt)
-            return json.loads(response.text)
+            if not response or not response.text:
+                return {"error": "No response received from AI model"}
+            return self._extract_json_from_response(response.text)
             
         except Exception as e:
             return {"error": f"IP analysis failed: {str(e)}"}
@@ -187,6 +244,8 @@ class AIAnalyzer:
             """
             
             response = self.model.generate_content(prompt)
+            if not response or not response.text:
+                return "Error: No response received from AI model"
             return response.text
             
         except Exception as e:

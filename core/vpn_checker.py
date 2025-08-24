@@ -1,7 +1,7 @@
 import requests
 import ipaddress
 
-API_KEY = "fb5fa399029543e0afb746bbc0560f78"  # Replace with your current key
+API_KEY = "f6ccd25c3fbc4915b19ccb6c787ad08e"  # Replace with your current key
 
 def is_private_ip(ip):
     try:
