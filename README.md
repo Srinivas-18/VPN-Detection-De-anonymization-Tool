@@ -475,9 +475,7 @@ google-generativeai>=0.3.0
 
 ## 👨‍💻 Developed By
 
-**Varigonda Lakshmi Srinivas**  
-Final Year B.Tech Project  
-🔗 [GitHub Profile](https://github.com/Srinivas-18)
+**Ourself**  
 
 ---
 
