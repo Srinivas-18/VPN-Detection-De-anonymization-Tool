@@ -1,7 +1,6 @@
 import requests
 import ipaddress
-
-API_KEY = "f6ccd25c3fbc4915b19ccb6c787ad08e"  # Replace with your current key
+from config import Config
 
 def is_private_ip(ip):
     try:
@@ -15,7 +14,12 @@ def check_vpn_status(ip):
         return False  # or return "Private" if you want to label it
 
     try:
-        url = f"https://vpnapi.io/api/{ip}?key={API_KEY}"
+        api_key = Config.VPN_API_KEY
+        if not api_key:
+            print(f"[!] VPN API key not configured")
+            return "Error"
+        
+        url = f"https://vpnapi.io/api/{ip}?key={api_key}"
         res = requests.get(url, timeout=5)
         data = res.json()
 

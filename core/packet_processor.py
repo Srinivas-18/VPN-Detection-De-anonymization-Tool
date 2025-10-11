@@ -71,28 +71,37 @@ def analyze_packet_details(pcap_path: str) -> Dict:
                                 'data': raw_data[:200]  # First 200 chars
                             })
                             
-                            # Extract potential passwords from HTTP data
-                            password_patterns = [
-                                r'password[=:]\s*([^\s&]+)',
-                                r'passwd[=:]\s*([^\s&]+)',
-                                r'pwd[=:]\s*([^\s&]+)',
-                                r'pass[=:]\s*([^\s&]+)',
-                                r'login[=:]\s*([^\s&]+)',
-                                r'user[=:]\s*([^\s&]+)',
-                                r'username[=:]\s*([^\s&]+)'
-                            ]
+                            # Extract potential passwords and usernames from HTTP data
+                            credential_patterns = {
+                                'password': [
+                                    r'password[=:]\s*([^\s&]+)',
+                                    r'passwd[=:]\s*([^\s&]+)',
+                                    r'pwd[=:]\s*([^\s&]+)',
+                                    r'pass[=:]\s*([^\s&]+)'
+                                ],
+                                'username': [
+                                    r'username[=:]\s*([^\s&]+)',
+                                    r'user[=:]\s*([^\s&]+)',
+                                    r'login[=:]\s*([^\s&]+)',
+                                    r'email[=:]\s*([^\s&]+)',
+                                    r'userid[=:]\s*([^\s&]+)',
+                                    r'account[=:]\s*([^\s&]+)'
+                                ]
+                            }
                             
-                            for pattern in password_patterns:
-                                matches = re.findall(pattern, raw_data, re.IGNORECASE)
-                                for match in matches:
-                                    if len(match) > 3:  # Filter out very short matches
-                                        analysis['potential_passwords'].append({
-                                            'type': 'HTTP',
-                                            'src_ip': src_ip,
-                                            'dst_ip': dst_ip,
-                                            'field': pattern.split('[')[0],
-                                            'value': match[:50]  # Truncate for security
-                                        })
+                            for cred_type, patterns in credential_patterns.items():
+                                for pattern in patterns:
+                                    matches = re.findall(pattern, raw_data, re.IGNORECASE)
+                                    for match in matches:
+                                        if len(match) > 2:  # Filter out very short matches
+                                            analysis['potential_passwords'].append({
+                                                'type': 'HTTP',
+                                                'credential_type': cred_type,
+                                                'src_ip': src_ip,
+                                                'dst_ip': dst_ip,
+                                                'field': pattern.split('[')[0],
+                                                'value': match[:50]  # Truncate for security
+                                            })
                 
                 # UDP Analysis
                 elif UDP in pkt:

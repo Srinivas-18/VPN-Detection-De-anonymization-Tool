@@ -1,7 +1,6 @@
 import requests
 from core.packet_processor import extract_ips_from_pcap
-
-API_KEY = "8bfb49775bc546b2aff5219404fa64c3"
+from config import Config
 
 def get_geo_info(pcap_file):
     ip_list, _ = extract_ips_from_pcap(pcap_file, return_total=True)
@@ -9,7 +8,16 @@ def get_geo_info(pcap_file):
 
     for ip in ip_list:
         try:
-            url = f"https://api.ipgeolocation.io/ipgeo?apiKey={API_KEY}&ip={ip}"
+            api_key = Config.IPGEO_API_KEY
+            if not api_key:
+                results[ip] = {
+                    "Country": "Error",
+                    "City": "API key not configured",
+                    "ISP": "Error"
+                }
+                continue
+            
+            url = f"https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}"
             res = requests.get(url, timeout=5)
             data = res.json()
             results[ip] = {

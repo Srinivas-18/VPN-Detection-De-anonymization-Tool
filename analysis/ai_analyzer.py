@@ -162,8 +162,12 @@ class AIAnalyzer:
     def generate_threat_report(self, analysis_data: Dict, payload_data: Dict) -> str:
         """Generate comprehensive threat report using AI"""
         try:
-            # Prepare comprehensive data summary
+            from datetime import datetime
+            
+            # Prepare comprehensive data summary with current date
+            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             summary = {
+                "analysis_date": current_date,
                 "total_ips": len(analysis_data),
                 "vpn_ips": sum(1 for data in analysis_data.values() if data.get("VPN Status") is True),
                 "countries": list(set(data.get("Country", "") for data in analysis_data.values() if data.get("Country"))),
@@ -171,20 +175,23 @@ class AIAnalyzer:
             }
             
             prompt = f"""
-            Generate a comprehensive cybersecurity threat report based on this network analysis.
+            Generate a comprehensive cybersecurity threat report based on this network analysis conducted on {current_date}.
+            
+            IMPORTANT: Use the current date {current_date} in your report, not any historical dates.
             
             Analysis Summary:
             {json.dumps(summary, indent=2)}
             
             Create a professional threat report with:
-            1. Executive Summary
-            2. Key Findings
+            1. Executive Summary (include current date: {current_date})
+            2. Key Findings (mention {summary['vpn_ips']} VPN IPs detected out of {summary['total_ips']} total IPs)
             3. Threat Assessment
             4. Risk Analysis
             5. Recommendations
             6. Technical Details
             
             Format as a structured report with clear sections and actionable insights.
+            Use the current date {current_date} throughout the report, not any historical dates.
             """
             
             response = self.model.generate_content(prompt)

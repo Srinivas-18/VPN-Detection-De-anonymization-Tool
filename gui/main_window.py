@@ -5,6 +5,11 @@ from core.vpn_checker import check_vpn_status
 from utils.report_writer import save_report, save_full_report, save_comprehensive_excel_report
 from deanon.fingerprint_extractor import extract_fingerprints
 from deanon.deanonymizer import classify_fingerprint
+from deanon.encrypted_traffic_analyzer import EncryptedTrafficAnalyzer
+from deanon.advanced_fingerprinting import AdvancedFingerprinter
+from deanon.traffic_flow_correlator import TrafficFlowCorrelator
+from deanon.dns_leak_detector import DNSLeakDetector
+from deanon.real_ip_detector import RealIPDetector
 from analysis.geo_locator import get_geo_info
 from analysis.mac_lookup import get_mac_info
 from analysis.payload_inspector import inspect_payloads
@@ -141,6 +146,11 @@ def launch_gui():
             if hasattr(app, "packet_analysis_results"):
                 packet_analysis = app.packet_analysis_results
             
+            # Get enhanced analysis data if available
+            enhanced_analysis = None
+            if hasattr(app, "enhanced_analysis"):
+                enhanced_analysis = app.enhanced_analysis
+            
             # Create comprehensive Excel report
             save_comprehensive_excel_report(
                 file_path,
@@ -152,7 +162,8 @@ def launch_gui():
                 mac_data=mac_data,
                 payload_data=payload_data,
                 ai_analysis=ai_analysis,
-                packet_analysis=packet_analysis
+                packet_analysis=packet_analysis,
+                enhanced_analysis=enhanced_analysis
             )
 
             messagebox.showinfo("Saved", f"Comprehensive Excel report saved to {file_path}")
@@ -317,32 +328,130 @@ def launch_gui():
             
             threading.Thread(target=worker, daemon=True).start()
 
+        def run_enhanced_deanonymization():
+            popup.destroy()
+            progress_label.config(text="🔐 Running Enhanced De-anonymization Analysis...")
+            
+            def worker():
+                try:
+                    # Initialize enhanced analyzers
+                    encrypted_analyzer = EncryptedTrafficAnalyzer()
+                    dns_detector = DNSLeakDetector()
+                    real_ip_detector = RealIPDetector()
+                    
+                    # Run enhanced analysis
+                    app.after(0, lambda: progress_label.config(text="🔐 Analyzing encrypted VPN traffic..."))
+                    encrypted_results = encrypted_analyzer.analyze_encrypted_traffic(app.file_path)
+                    
+                    app.after(0, lambda: progress_label.config(text="🌐 DNS leak detection..."))
+                    dns_results = dns_detector.detect_dns_leaks(app.file_path)
+                    
+                    app.after(0, lambda: progress_label.config(text="🔍 Detecting real IP addresses..."))
+                    real_ip_results = real_ip_detector.detect_real_ip_from_pcap(app.file_path)
+                    
+                    app.after(0, lambda: progress_label.config(text="🔬 Advanced device fingerprinting..."))
+                    
+                    # Advanced Device Fingerprinting
+                    fingerprinter = AdvancedFingerprinter()
+                    fingerprint_results = fingerprinter.analyze_advanced_fingerprints(app.file_path)
+                    
+                    app.after(0, lambda: progress_label.config(text="🔗 Traffic flow correlation..."))
+                    
+                    # Traffic Flow Correlation
+                    flow_correlator = TrafficFlowCorrelator()
+                    flow_results = flow_correlator.analyze_traffic_flows(app.file_path)
+                    
+                    app.after(0, lambda: progress_label.config(text="📊 Extracting encrypted data..."))
+                    
+                    # Extract encrypted data
+                    from simple_extract_encrypted import extract_xvpn_encrypted_data
+                    encrypted_packets = extract_xvpn_encrypted_data(app.file_path)
+                    
+                    # Store enhanced analysis results
+                    app.enhanced_analysis = {
+                        'real_ip_detection': real_ip_results,
+                        'dns_leaks': dns_results,
+                        'encrypted_traffic': encrypted_results,
+                        'advanced_fingerprints': fingerprint_results,
+                        'traffic_flows': flow_results,
+                        'encrypted_data_extraction': {
+                            'total_encrypted_packets': len(encrypted_packets) if encrypted_packets else 0,
+                            'sample_packets': encrypted_packets[:5] if encrypted_packets else []
+                        }
+                    }
+                    
+                    # Initialize full_analysis if it doesn't exist
+                    if not hasattr(app, 'full_analysis'):
+                        app.full_analysis = {}
+                    
+                    # Merge with full analysis data for detected VPN IPs
+                    detected_vpn_ips = real_ip_results.get('vpn_ips_detected', [])
+                    if detected_vpn_ips:
+                        for vpn_ip in detected_vpn_ips:
+                            app.full_analysis.setdefault(vpn_ip, {})["Real_IP_Detection"] = real_ip_results
+                            app.full_analysis.setdefault(vpn_ip, {})["DNS_Leaks"] = dns_results
+                            app.full_analysis.setdefault(vpn_ip, {})["Encrypted_Traffic"] = encrypted_results
+                            app.full_analysis.setdefault(vpn_ip, {})["Advanced_Fingerprints"] = fingerprint_results
+                            app.full_analysis.setdefault(vpn_ip, {})["Traffic_Flows"] = flow_results
+                            app.full_analysis.setdefault(vpn_ip, {})["Encrypted_Packets"] = len(encrypted_packets) if encrypted_packets else 0
+                            
+                            if real_ip_results.get('potential_real_ips'):
+                                app.full_analysis[vpn_ip]["Real_IP_Detected"] = "Yes"
+                                app.full_analysis[vpn_ip]["Potential_Real_IPs"] = real_ip_results['potential_real_ips']
+                    
+                    app.after(0, lambda: progress_label.config(text="✅ Enhanced de-anonymization complete"))
+                    app.after(0, lambda: show_enhanced_analysis_popup(app.enhanced_analysis))
+                    
+                except Exception as e:
+                    app.after(0, lambda: progress_label.config(text=f"❌ Enhanced analysis failed: {str(e)}"))
+            
+            threading.Thread(target=worker, daemon=True).start()
+
         def run_ai_analysis(ai_analyzer):
             popup.destroy()
             progress_label.config(text="🤖 Running AI Threat Analysis...")
             
             def worker():
                 try:
-                    # Check if we have analysis data
-                    if not hasattr(app, "full_analysis") or not app.full_analysis:
-                        app.after(0, lambda: progress_label.config(text="❌ No analysis data available. Run other analyses first."))
+                    # Check if we have VPN analysis data
+                    if not hasattr(app, "results") or not app.results:
+                        app.after(0, lambda: progress_label.config(text="❌ No VPN analysis data available. Run VPN detection first."))
                         return
+                    
+                    # Combine VPN results with full analysis data
+                    combined_analysis = {}
+                    
+                    # First, add VPN detection results
+                    for ip, vpn_status in app.results:
+                        combined_analysis[ip] = {"VPN Status": vpn_status}
+                    
+                    # Then, merge with full analysis data if available
+                    if hasattr(app, "full_analysis") and app.full_analysis:
+                        for ip, data in app.full_analysis.items():
+                            if ip in combined_analysis:
+                                combined_analysis[ip].update(data)
+                            else:
+                                combined_analysis[ip] = data
+                    
+                    # Include enhanced analysis if available
+                    if hasattr(app, "enhanced_analysis") and app.enhanced_analysis:
+                        combined_analysis["enhanced_deanonymization"] = app.enhanced_analysis
                     
                     # Get payload data if available
                     payload_data = {}
-                    for ip, data in app.full_analysis.items():
-                        if "Payload" in data:
+                    for ip, data in combined_analysis.items():
+                        if isinstance(data, dict) and "Payload" in data:
                             payload_data[ip] = data["Payload"]
                     
                     # Run AI analysis
                     app.after(0, lambda: progress_label.config(text="🤖 Analyzing network behavior with AI..."))
-                    network_analysis = ai_analyzer.analyze_network_behavior(app.full_analysis)
+                    network_analysis = ai_analyzer.analyze_network_behavior(combined_analysis)
                     
                     app.after(0, lambda: progress_label.config(text="🤖 Analyzing payload intelligence..."))
                     payload_analysis = ai_analyzer.analyze_payload_intelligence(payload_data)
                     
                     app.after(0, lambda: progress_label.config(text="🤖 Generating comprehensive threat report..."))
-                    threat_report = ai_analyzer.generate_threat_report(app.full_analysis, payload_data)
+                    threat_report = ai_analyzer.generate_threat_report(combined_analysis, payload_data)
                     
                     # Store AI analysis results for comprehensive report
                     app.ai_analysis_results = {
@@ -364,12 +473,29 @@ def launch_gui():
         tk.Button(popup, text="🔍 MAC Address Lookup", command=run_mac, bg="#3a3a5c", fg="white", width=25).pack(pady=10)
         tk.Button(popup, text="📦 Payload Inspection", command=run_payload, bg="#3a3a5c", fg="white", width=25).pack(pady=10)
         tk.Button(popup, text="📊 Detailed Packet Analysis", command=run_detailed_analysis, bg="#4CAF50", fg="white", width=25).pack(pady=10)
+        tk.Button(popup, text="🔐 Enhanced De-anonymization", command=run_enhanced_deanonymization, bg="#e74c3c", fg="white", width=25).pack(pady=10)
         
         # Add AI Analysis button if API key is available
-        ai_analyzer = get_ai_analyzer()
-        if ai_analyzer:
-            tk.Button(popup, text="🤖 AI Threat Analysis", command=lambda: run_ai_analysis(ai_analyzer), 
-                     bg="#ff6b35", fg="white", width=25).pack(pady=10)
+        try:
+            ai_analyzer = get_ai_analyzer()
+            if ai_analyzer:
+                ai_button = tk.Button(popup, text="🤖 AI Threat Analysis", command=lambda: run_ai_analysis(ai_analyzer), 
+                                    bg="#ff6b35", fg="white", width=25, font=("Arial", 10, "bold"))
+                ai_button.pack(pady=10)
+                print("✅ AI Threat Analysis button created and packed")
+            else:
+                print("❌ AI Analyzer is None - button not added")
+                # Add a placeholder button to show the issue
+                placeholder_button = tk.Button(popup, text="❌ AI Not Available", 
+                                             bg="#666666", fg="white", width=25, state="disabled")
+                placeholder_button.pack(pady=10)
+        except Exception as e:
+            print(f"❌ Error getting AI analyzer: {e}")
+            # Add error button for debugging
+            error_button = tk.Button(popup, text="🤖 AI Error (Click for details)", 
+                                   command=lambda: messagebox.showerror("AI Error", str(e)), 
+                                   bg="#cc0000", fg="white", width=25)
+            error_button.pack(pady=10)
 
     def show_geo_popup(geo_data):
         popup = tk.Toplevel(app)
@@ -444,9 +570,9 @@ def launch_gui():
         else:
             network_text.insert("end", f"❌ Error: {network_analysis['error']}")
 
-        # Tab 2: Payload Intelligence
+        # Tab 2: Payload Intelligence Analysis
         tab2 = tk.Frame(notebook, bg="#1e1e2f")
-        notebook.add(tab2, text="Payload Intelligence")
+        notebook.add(tab2, text="Payload Analysis")
         
         payload_text = tk.Text(tab2, bg="#2a2a3a", fg="lightblue", font=("Courier", 10), wrap="word")
         payload_text.pack(padx=20, pady=10, fill="both", expand=True)
@@ -456,7 +582,7 @@ def launch_gui():
             payload_text.insert("end", "🔍 PAYLOAD INTELLIGENCE ANALYSIS\n")
             payload_text.insert("end", "=" * 50 + "\n\n")
             for key, value in payload_analysis.items():
-                payload_text.insert("end", f"📊 {key.replace('_', ' ').title()}:\n")
+                payload_text.insert("end", f"📦 {key.replace('_', ' ').title()}:\n")
                 if isinstance(value, list):
                     for item in value:
                         payload_text.insert("end", f"  • {item}\n")
@@ -466,17 +592,17 @@ def launch_gui():
         else:
             payload_text.insert("end", f"❌ Error: {payload_analysis['error']}")
 
-        # Tab 3: Comprehensive Threat Report
+        # Tab 3: Threat Report
         tab3 = tk.Frame(notebook, bg="#1e1e2f")
         notebook.add(tab3, text="Threat Report")
         
-        report_text = tk.Text(tab3, bg="#2a2a3a", fg="white", font=("Courier", 10), wrap="word")
-        report_text.pack(padx=20, pady=10, fill="both", expand=True)
+        threat_text = tk.Text(tab3, bg="#2a2a3a", fg="orange", font=("Courier", 10), wrap="word")
+        threat_text.pack(padx=20, pady=10, fill="both", expand=True)
         
         # Display threat report
-        report_text.insert("end", "📋 COMPREHENSIVE THREAT REPORT\n")
-        report_text.insert("end", "=" * 50 + "\n\n")
-        report_text.insert("end", threat_report)
+        threat_text.insert("end", "🚨 COMPREHENSIVE THREAT REPORT\n")
+        threat_text.insert("end", "=" * 50 + "\n\n")
+        threat_text.insert("end", threat_report)
 
         # Close button
         tk.Button(popup, text="Close", command=popup.destroy, bg="#3a3a5c", fg="white").pack(pady=10)
@@ -663,29 +789,50 @@ def launch_gui():
         for query in analysis_data.get('dns_queries', [])[:20]:  # Show first 20
             website_text.insert("end", f"  • {query['src_ip']} → {query['query']}\n")
 
-        # Tab 3: Potential Passwords
+        # Tab 3: Credential Detection (Passwords & Usernames)
         tab3 = tk.Frame(notebook, bg="#1e1e2f")
-        notebook.add(tab3, text="Password Detection")
+        notebook.add(tab3, text="Credential Detection")
         
         password_text = tk.Text(tab3, bg="#2a2a3a", fg="red", font=("Courier", 10), wrap="word")
         password_text.pack(padx=20, pady=10, fill="both", expand=True)
         
-        # Display potential passwords
-        password_text.insert("end", "🔐 POTENTIAL PASSWORD DETECTION\n")
-        password_text.insert("end", "=" * 50 + "\n\n")
+        # Display potential credentials (passwords and usernames)
+        password_text.insert("end", "🔐 CREDENTIAL DETECTION (PASSWORDS & USERNAMES)\n")
+        password_text.insert("end", "=" * 60 + "\n\n")
         
-        passwords = analysis_data.get('potential_passwords', [])
-        if passwords:
-            password_text.insert("end", f"⚠️ Found {len(passwords)} potential password fields!\n\n")
-            for pwd in passwords:
-                password_text.insert("end", f"🔍 Type: {pwd['type']}\n")
-                password_text.insert("end", f"   Source IP: {pwd['src_ip']}\n")
-                password_text.insert("end", f"   Destination IP: {pwd['dst_ip']}\n")
-                password_text.insert("end", f"   Field: {pwd['field']}\n")
-                password_text.insert("end", f"   Value: {pwd['value']}\n")
-                password_text.insert("end", "-" * 40 + "\n")
+        credentials = analysis_data.get('potential_passwords', [])
+        if credentials:
+            # Separate credentials by type
+            passwords = [c for c in credentials if c.get('credential_type') == 'password']
+            usernames = [c for c in credentials if c.get('credential_type') == 'username']
+            
+            password_text.insert("end", f"⚠️ Found {len(credentials)} potential credential fields!\n")
+            password_text.insert("end", f"   • Passwords: {len(passwords)}\n")
+            password_text.insert("end", f"   • Usernames: {len(usernames)}\n\n")
+            
+            # Display usernames first
+            if usernames:
+                password_text.insert("end", "👤 USERNAMES DETECTED:\n")
+                password_text.insert("end", "-" * 30 + "\n")
+                for cred in usernames:
+                    password_text.insert("end", f"🔍 Field: {cred['field']}\n")
+                    password_text.insert("end", f"   Source IP: {cred['src_ip']}\n")
+                    password_text.insert("end", f"   Destination IP: {cred['dst_ip']}\n")
+                    password_text.insert("end", f"   Value: {cred['value']}\n")
+                    password_text.insert("end", "-" * 30 + "\n")
+            
+            # Display passwords
+            if passwords:
+                password_text.insert("end", "\n🔒 PASSWORDS DETECTED:\n")
+                password_text.insert("end", "-" * 30 + "\n")
+                for cred in passwords:
+                    password_text.insert("end", f"🔍 Field: {cred['field']}\n")
+                    password_text.insert("end", f"   Source IP: {cred['src_ip']}\n")
+                    password_text.insert("end", f"   Destination IP: {cred['dst_ip']}\n")
+                    password_text.insert("end", f"   Value: {cred['value']}\n")
+                    password_text.insert("end", "-" * 30 + "\n")
         else:
-            password_text.insert("end", "✅ No potential passwords detected in this capture.\n")
+            password_text.insert("end", "✅ No potential credentials detected in this capture.\n")
 
         # Tab 4: Suspicious Activity
         tab4 = tk.Frame(notebook, bg="#1e1e2f")
@@ -726,6 +873,428 @@ def launch_gui():
                 connection_text.insert("end", f"  • {connection}: {count} packets\n")
         else:
             connection_text.insert("end", "No connection data available.\n")
+
+        # Close button
+        tk.Button(popup, text="Close", command=popup.destroy, bg="#3a3a5c", fg="white").pack(pady=10)
+
+    def show_enhanced_analysis_popup(enhanced_data):
+        popup = tk.Toplevel()
+        popup.title("🔐 Enhanced De-anonymization Results")
+        popup.geometry("1200x900")
+        popup.configure(bg="#1e1e2f")
+
+        # Title
+        tk.Label(popup, text="🔐 Enhanced De-anonymization Analysis", font=("Helvetica", 16, "bold"), 
+                fg="white", bg="#1e1e2f").pack(pady=10)
+
+        # Create notebook for tabs
+        notebook = ttk.Notebook(popup)
+        notebook.pack(padx=20, pady=10, fill="both", expand=True)
+
+        # Tab 1: Real IP Detection Results
+        tab1 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab1, text="🎯 Real IP Detection")
+        
+        real_ip_text = tk.Text(tab1, bg="#2a2a3a", fg="lightgreen", font=("Courier", 10), wrap="word")
+        real_ip_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display real IP detection results
+        real_ip_results = enhanced_data.get('real_ip_detection', {})
+        if 'error' not in real_ip_results:
+            real_ip_text.insert("end", "🎯 REAL IP DETECTION RESULTS\n")
+            real_ip_text.insert("end", "=" * 50 + "\n\n")
+            
+            vpn_ips = real_ip_results.get('vpn_ips_detected', [])
+            potential_ips = real_ip_results.get('potential_real_ips', [])
+            dns_leaks = real_ip_results.get('dns_leak_ips', [])
+            webrtc_leaks = real_ip_results.get('webrtc_leak_ips', [])
+            timing_ips = real_ip_results.get('timing_correlation_ips', [])
+            confidence_scores = real_ip_results.get('confidence_scores', {})
+            
+            real_ip_text.insert("end", f"🔴 VPN IPs Detected: {len(vpn_ips)}\n")
+            for ip in vpn_ips:
+                real_ip_text.insert("end", f"   • {ip}\n")
+            
+            real_ip_text.insert("end", f"\n💡 Potential Real IPs: {len(potential_ips)}\n")
+            if potential_ips:
+                for ip in potential_ips:
+                    confidence = confidence_scores.get(ip, 0)
+                    real_ip_text.insert("end", f"   🎯 {ip} (Confidence: {confidence}%)\n")
+            else:
+                real_ip_text.insert("end", "   ❌ No high-confidence real IPs detected\n")
+            
+            real_ip_text.insert("end", f"\n🌐 DNS Leak IPs: {len(dns_leaks)}\n")
+            for ip in dns_leaks[:10]:  # Show first 10
+                real_ip_text.insert("end", f"   🚨 {ip}\n")
+            if len(dns_leaks) > 10:
+                real_ip_text.insert("end", f"   ... and {len(dns_leaks) - 10} more\n")
+            
+            real_ip_text.insert("end", f"\n📡 WebRTC Leak IPs: {len(webrtc_leaks)}\n")
+            for ip in webrtc_leaks:
+                real_ip_text.insert("end", f"   🚨 {ip}\n")
+            
+            real_ip_text.insert("end", f"\n⏱️ Timing Correlation IPs: {len(timing_ips)}\n")
+            for ip in timing_ips:
+                real_ip_text.insert("end", f"   🔗 {ip}\n")
+            
+            # Analysis summary
+            summary = real_ip_results.get('analysis_summary', {})
+            if summary:
+                real_ip_text.insert("end", "\n📊 Analysis Summary:\n")
+                real_ip_text.insert("end", f"   • Methods Used: {summary.get('total_methods_used', 0)}\n")
+                real_ip_text.insert("end", f"   • Success Rate: {summary.get('overall_success_rate', 0)}%\n")
+                
+                if summary.get('highest_confidence_ip'):
+                    highest = summary['highest_confidence_ip']
+                    real_ip_text.insert("end", f"   • Top Candidate: {highest['ip']} ({highest['confidence']}%)\n")
+        else:
+            real_ip_text.insert("end", f"❌ Error: {real_ip_results['error']}")
+
+        # Tab 2: Encrypted Data Extraction
+        tab2 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab2, text="🔒 Encrypted Data")
+        
+        encrypted_text = tk.Text(tab2, bg="#2a2a3a", fg="lightblue", font=("Courier", 10), wrap="word")
+        encrypted_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display encrypted data extraction results
+        encrypted_extraction = enhanced_data.get('encrypted_data_extraction', {})
+        total_packets = encrypted_extraction.get('total_encrypted_packets', 0)
+        sample_packets = encrypted_extraction.get('sample_packets', [])
+        
+        encrypted_text.insert("end", "🔒 ENCRYPTED DATA EXTRACTION\n")
+        encrypted_text.insert("end", "=" * 50 + "\n\n")
+        encrypted_text.insert("end", f"📊 Total VPN Encrypted Packets: {total_packets}\n\n")
+        
+        if sample_packets:
+            encrypted_text.insert("end", "🔍 Sample Encrypted Packets:\n")
+            encrypted_text.insert("end", "-" * 40 + "\n")
+            
+            for i, pkt in enumerate(sample_packets[:5], 1):
+                direction = "OUT" if pkt['src_ip'] != "51.15.62.60" else "IN"
+                encrypted_text.insert("end", f"{i}. [{direction}] {pkt['src_ip']} → {pkt['dst_ip']}\n")
+                encrypted_text.insert("end", f"   Length: {pkt['data_length']} bytes\n")
+                encrypted_text.insert("end", f"   Hex: {pkt['hex_data'][:60]}...\n")
+                encrypted_text.insert("end", "-" * 40 + "\n")
+        else:
+            encrypted_text.insert("end", "❌ No encrypted packets extracted\n")
+
+        # Tab 3: DNS Leak Analysis
+        tab3 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab3, text="🌐 DNS Leaks")
+        
+        dns_text = tk.Text(tab3, bg="#2a2a3a", fg="orange", font=("Courier", 10), wrap="word")
+        dns_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display DNS leak results
+        dns_results = enhanced_data.get('dns_leaks', {})
+        if 'error' not in dns_results:
+            dns_text.insert("end", "🌐 DNS LEAK ANALYSIS\n")
+            dns_text.insert("end", "=" * 50 + "\n\n")
+            
+            total_queries = dns_results.get('total_dns_queries', 0)
+            leaked_queries = dns_results.get('leaked_queries', 0)
+            dns_servers = dns_results.get('dns_servers_used', [])
+            suspicious_domains = dns_results.get('suspicious_domains', [])
+            
+            # Handle case where dns_servers might be a dict instead of list
+            if isinstance(dns_servers, dict):
+                dns_servers_list = list(dns_servers.keys())
+            else:
+                dns_servers_list = dns_servers if isinstance(dns_servers, list) else []
+            
+            dns_text.insert("end", f"📊 Total DNS Queries: {total_queries}\n")
+            dns_text.insert("end", f"🚨 Leaked Queries: {leaked_queries}\n")
+            dns_text.insert("end", f"🌐 DNS Servers Used: {len(dns_servers_list)}\n\n")
+            
+            # DNS Servers Details
+            if dns_servers_list:
+                dns_text.insert("end", "🌐 DNS Servers:\n")
+                for server in dns_servers_list[:10]:
+                    # Get server details if available
+                    server_info = dns_results.get('dns_server_analysis', {}).get(server, {})
+                    server_type = server_info.get('type', 'Unknown')
+                    privacy_risk = server_info.get('privacy_risk', 'Unknown')
+                    dns_text.insert("end", f"   • {server} ({server_type}) - Risk: {privacy_risk}\n")
+                if len(dns_servers_list) > 10:
+                    dns_text.insert("end", f"   ... and {len(dns_servers_list) - 10} more servers\n")
+            
+            # WebRTC Leak Details
+            webrtc_leaks = dns_results.get('webrtc_leaks', [])
+            dns_text.insert("end", f"\n📡 WebRTC Leak IPs: {len(webrtc_leaks)}\n")
+            if webrtc_leaks:
+                for leak_ip in webrtc_leaks[:5]:
+                    dns_text.insert("end", f"   🚨 {leak_ip}\n")
+                if len(webrtc_leaks) > 5:
+                    dns_text.insert("end", f"   ... and {len(webrtc_leaks) - 5} more\n")
+            
+            # Timing Correlation Details
+            timing_ips = dns_results.get('timing_correlation_ips', [])
+            dns_text.insert("end", f"\n⏱️ Timing Correlation IPs: {len(timing_ips)}\n")
+            if timing_ips:
+                for timing_ip in timing_ips[:5]:
+                    dns_text.insert("end", f"   🔗 {timing_ip}\n")
+                if len(timing_ips) > 5:
+                    dns_text.insert("end", f"   ... and {len(timing_ips) - 5} more\n")
+            
+            # HTTP Header Leaks
+            http_leaks = dns_results.get('http_header_leaks', [])
+            if http_leaks:
+                dns_text.insert("end", f"\n📋 HTTP Header Leaks: {len(http_leaks)}\n")
+                for header_leak in http_leaks[:3]:
+                    dns_text.insert("end", f"   📄 {header_leak}\n")
+            
+            # Privacy Assessment
+            privacy_assessment = dns_results.get('privacy_assessment', {})
+            if privacy_assessment:
+                risk_score = privacy_assessment.get('overall_risk_score', 0)
+                risk_level = privacy_assessment.get('risk_level', 'Unknown')
+                dns_text.insert("end", f"\n🛡️ Privacy Risk Assessment:\n")
+                dns_text.insert("end", f"   Risk Level: {risk_level} ({risk_score:.2f})\n")
+                
+                risk_factors = privacy_assessment.get('risk_factors', [])
+                if risk_factors:
+                    dns_text.insert("end", "   Risk Factors:\n")
+                    # Handle both list and dict types for risk_factors
+                    if isinstance(risk_factors, list):
+                        for factor in risk_factors[:5]:
+                            dns_text.insert("end", f"     • {factor}\n")
+                    elif isinstance(risk_factors, dict):
+                        for key, value in list(risk_factors.items())[:5]:
+                            dns_text.insert("end", f"     • {key}: {value}\n")
+                    else:
+                        dns_text.insert("end", f"     • {risk_factors}\n")
+            
+            # Suspicious Domains
+            if suspicious_domains:
+                dns_text.insert("end", f"\n🚨 Suspicious Domains ({len(suspicious_domains)}):\n")
+                for domain in suspicious_domains[:10]:
+                    # Get suspicion reason if available
+                    domain_info = dns_results.get('suspicious_domain_analysis', {}).get(domain, {})
+                    reason = domain_info.get('reason', 'May reveal personal information')
+                    dns_text.insert("end", f"   • {domain} - {reason}\n")
+                if len(suspicious_domains) > 10:
+                    dns_text.insert("end", f"   ... and {len(suspicious_domains) - 10} more\n")
+            
+            # Recommendations
+            recommendations = dns_results.get('recommendations', [])
+            if recommendations:
+                dns_text.insert("end", f"\n💡 Recommendations:\n")
+                for rec in recommendations[:5]:
+                    dns_text.insert("end", f"   • {rec}\n")
+        else:
+            dns_text.insert("end", f"❌ Error: {dns_results['error']}")
+
+        # Tab 4: Encrypted Traffic Analysis
+        tab4 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab4, text="📊 Traffic Analysis")
+        
+        traffic_text = tk.Text(tab4, bg="#2a2a3a", fg="cyan", font=("Courier", 10), wrap="word")
+        traffic_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display encrypted traffic analysis
+        encrypted_results = enhanced_data.get('encrypted_traffic', {})
+        if 'error' not in encrypted_results:
+            traffic_text.insert("end", "📊 ENCRYPTED TRAFFIC ANALYSIS\n")
+            traffic_text.insert("end", "=" * 50 + "\n\n")
+            
+            # Statistics Overview
+            statistics = encrypted_results.get('statistics', {})
+            if statistics:
+                traffic_text.insert("end", "📈 ENCRYPTION STATISTICS:\n")
+                traffic_text.insert("end", f"   🔒 Total Encrypted Packets: {statistics.get('total_encrypted_packets', 0)}\n")
+                traffic_text.insert("end", f"   🌐 TLS/SSL Packets: {statistics.get('tls_packets', 0)}\n")
+                traffic_text.insert("end", f"   🛡️ VPN Encrypted Packets: {statistics.get('vpn_packets', 0)}\n")
+                traffic_text.insert("end", f"   ❓ Other Encrypted Packets: {statistics.get('raw_encrypted_packets', 0)}\n\n")
+            
+            # TLS Sessions Analysis
+            tls_sessions = encrypted_results.get('tls_sessions', [])
+            if tls_sessions:
+                traffic_text.insert("end", f"🔐 TLS/SSL SESSIONS ({len(tls_sessions)}):\n")
+                for i, session in enumerate(tls_sessions[:5]):
+                    traffic_text.insert("end", f"   Session {i+1}: {session.get('src_ip', 'Unknown')}:{session.get('src_port', 0)} → {session.get('dst_ip', 'Unknown')}:{session.get('dst_port', 0)}\n")
+                    traffic_text.insert("end", f"      📦 Length: {session.get('data_length', 0)} bytes\n")
+                    traffic_text.insert("end", f"      🛡️ VPN Related: {'✅' if session.get('is_vpn_related', False) else '❌'}\n")
+                    traffic_text.insert("end", f"      🔢 Hex Preview: {session.get('encrypted_payload', '')[:32]}...\n")
+                    traffic_text.insert("end", f"      📊 Protocol: {session.get('protocol', 'Unknown')}\n\n")
+                if len(tls_sessions) > 5:
+                    traffic_text.insert("end", f"   ... and {len(tls_sessions) - 5} more TLS sessions\n\n")
+            
+            # VPN Encrypted Data Analysis
+            vpn_data = encrypted_results.get('vpn_encrypted_data', [])
+            if vpn_data:
+                traffic_text.insert("end", f"🛡️ VPN ENCRYPTED DATA ({len(vpn_data)}):\n")
+                for i, vpn_packet in enumerate(vpn_data[:3]):
+                    traffic_text.insert("end", f"   VPN Packet {i+1}: {vpn_packet.get('src_ip', 'Unknown')}:{vpn_packet.get('src_port', 0)} → {vpn_packet.get('dst_ip', 'Unknown')}:{vpn_packet.get('dst_port', 0)}\n")
+                    traffic_text.insert("end", f"      📦 Length: {vpn_packet.get('data_length', 0)} bytes\n")
+                    traffic_text.insert("end", f"      🔐 Encryption Type: {vpn_packet.get('encryption_type', 'Unknown')}\n")
+                    traffic_text.insert("end", f"      🔢 Hex Data: {vpn_packet.get('encrypted_payload', '')[:64]}...\n")
+                    traffic_text.insert("end", f"      📊 Protocol: {vpn_packet.get('protocol', 'Unknown')}\n\n")
+                if len(vpn_data) > 3:
+                    traffic_text.insert("end", f"   ... and {len(vpn_data) - 3} more VPN packets\n\n")
+            
+            # Other Encrypted Payloads
+            encrypted_payloads = encrypted_results.get('encrypted_payloads', [])
+            if encrypted_payloads:
+                traffic_text.insert("end", f"❓ OTHER ENCRYPTED PAYLOADS ({len(encrypted_payloads)}):\n")
+                for i, payload in enumerate(encrypted_payloads[:3]):
+                    traffic_text.insert("end", f"   Payload {i+1}: {payload.get('src_ip', 'Unknown')} → {payload.get('dst_ip', 'Unknown')}\n")
+                    traffic_text.insert("end", f"      📦 Length: {payload.get('data_length', 0)} bytes\n")
+                    traffic_text.insert("end", f"      📊 Entropy Score: {payload.get('entropy_score', 0):.2f}\n")
+                    traffic_text.insert("end", f"      🔢 Hex Sample: {payload.get('encrypted_payload', '')[:32]}...\n")
+                    traffic_text.insert("end", f"      📊 Protocol: {payload.get('protocol', 'Unknown')}\n\n")
+                if len(encrypted_payloads) > 3:
+                    traffic_text.insert("end", f"   ... and {len(encrypted_payloads) - 3} more encrypted payloads\n\n")
+            
+            # Binary Analysis Summary
+            analyzed_ips = encrypted_results.get('analyzed_ips', [])
+            traffic_patterns = encrypted_results.get('traffic_patterns', {})
+            applications = encrypted_results.get('detected_applications', [])
+            
+            if analyzed_ips:
+                traffic_text.insert("end", f"🔍 ANALYZED IPs ({len(analyzed_ips)}):\n")
+                for ip in analyzed_ips[:10]:
+                    traffic_text.insert("end", f"   • {ip}\n")
+                if len(analyzed_ips) > 10:
+                    traffic_text.insert("end", f"   ... and {len(analyzed_ips) - 10} more IPs\n")
+                traffic_text.insert("end", "\n")
+            
+            if traffic_patterns:
+                traffic_text.insert("end", f"📈 TRAFFIC PATTERNS:\n")
+                for pattern, count in traffic_patterns.items():
+                    traffic_text.insert("end", f"   • {pattern}: {count}\n")
+                traffic_text.insert("end", "\n")
+            
+            if applications:
+                traffic_text.insert("end", f"📱 DETECTED APPLICATIONS:\n")
+                for app in applications:
+                    traffic_text.insert("end", f"   • {app}\n")
+                traffic_text.insert("end", "\n")
+            
+            # Encryption Quality Assessment
+            traffic_text.insert("end", "🔬 BINARY ANALYSIS INSIGHTS:\n")
+            traffic_text.insert("end", "   • High entropy data indicates strong encryption\n")
+            traffic_text.insert("end", "   • TLS sessions show application-layer encryption\n")
+            traffic_text.insert("end", "   • VPN tunnels provide network-layer encryption\n")
+            traffic_text.insert("end", "   • Hex dumps reveal encryption signatures and patterns\n")
+        else:
+            traffic_text.insert("end", f"❌ Error: {encrypted_results['error']}")
+
+        # Tab 5: Advanced Fingerprinting
+        tab5 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab5, text="🔬 Fingerprinting")
+        
+        fingerprint_text = tk.Text(tab5, bg="#2a2a3a", fg="lightgreen", font=("Courier", 10), wrap="word")
+        fingerprint_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display advanced fingerprinting results
+        fingerprint_results = enhanced_data.get('advanced_fingerprints', {})
+        if 'error' not in fingerprint_results:
+            fingerprint_text.insert("end", "🔬 ADVANCED DEVICE FINGERPRINTING\n")
+            fingerprint_text.insert("end", "=" * 50 + "\n\n")
+            
+            # OS Detection
+            os_detection = fingerprint_results.get('os_detection', {})
+            if os_detection:
+                fingerprint_text.insert("end", "💻 OPERATING SYSTEM DETECTION:\n")
+                for ip, os_info in os_detection.items():
+                    fingerprint_text.insert("end", f"   📱 {ip}:\n")
+                    fingerprint_text.insert("end", f"      OS: {os_info.get('os', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Version: {os_info.get('version', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      TTL: {os_info.get('ttl', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Confidence: {os_info.get('confidence', 0)}%\n\n")
+            
+            # Device Fingerprints
+            device_fingerprints = fingerprint_results.get('device_fingerprints', {})
+            if device_fingerprints:
+                fingerprint_text.insert("end", "🖥️ DEVICE FINGERPRINTS:\n")
+                for ip, device_info in device_fingerprints.items():
+                    fingerprint_text.insert("end", f"   🔍 {ip}:\n")
+                    fingerprint_text.insert("end", f"      Device Type: {device_info.get('device_type', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Browser: {device_info.get('browser', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Platform: {device_info.get('platform', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      MAC Vendor: {device_info.get('mac_vendor', 'Unknown')}\n\n")
+            
+            # Network Behavior
+            network_behavior = fingerprint_results.get('network_behavior', {})
+            if network_behavior:
+                fingerprint_text.insert("end", "🌐 NETWORK BEHAVIOR ANALYSIS:\n")
+                for ip, behavior in network_behavior.items():
+                    fingerprint_text.insert("end", f"   📊 {ip}:\n")
+                    fingerprint_text.insert("end", f"      Connection Pattern: {behavior.get('connection_pattern', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Traffic Volume: {behavior.get('traffic_volume', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Protocol Usage: {behavior.get('protocol_usage', 'Unknown')}\n")
+                    fingerprint_text.insert("end", f"      Timing Pattern: {behavior.get('timing_pattern', 'Unknown')}\n\n")
+            
+            # Application Signatures
+            app_signatures = fingerprint_results.get('application_signatures', {})
+            if app_signatures:
+                fingerprint_text.insert("end", "📱 APPLICATION SIGNATURES:\n")
+                for ip, apps in app_signatures.items():
+                    fingerprint_text.insert("end", f"   🔍 {ip}:\n")
+                    if isinstance(apps, list):
+                        for app in apps[:5]:
+                            fingerprint_text.insert("end", f"      • {app}\n")
+                    else:
+                        fingerprint_text.insert("end", f"      • {apps}\n")
+                    fingerprint_text.insert("end", "\n")
+        else:
+            fingerprint_text.insert("end", f"❌ Error: {fingerprint_results['error']}")
+
+        # Tab 6: Traffic Flow Analysis
+        tab6 = tk.Frame(notebook, bg="#1e1e2f")
+        notebook.add(tab6, text="🔗 Flow Analysis")
+        
+        flow_text = tk.Text(tab6, bg="#2a2a3a", fg="yellow", font=("Courier", 10), wrap="word")
+        flow_text.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Display traffic flow analysis results
+        flow_results = enhanced_data.get('traffic_flows', {})
+        if 'error' not in flow_results:
+            flow_text.insert("end", "🔗 TRAFFIC FLOW CORRELATION\n")
+            flow_text.insert("end", "=" * 50 + "\n\n")
+            
+            # Flow Statistics
+            flow_stats = flow_results.get('flow_statistics', {})
+            if flow_stats:
+                flow_text.insert("end", "📊 FLOW STATISTICS:\n")
+                flow_text.insert("end", f"   Total Flows: {flow_stats.get('total_flows', 0)}\n")
+                flow_text.insert("end", f"   Unique IPs: {flow_stats.get('unique_ips', 0)}\n")
+                flow_text.insert("end", f"   Average Flow Duration: {flow_stats.get('avg_duration', 0):.2f}s\n")
+                flow_text.insert("end", f"   Total Data Volume: {flow_stats.get('total_volume', 0)} bytes\n\n")
+            
+            # Correlation Results
+            correlations = flow_results.get('correlations', {})
+            if correlations:
+                flow_text.insert("end", "🔗 CORRELATION ANALYSIS:\n")
+                for correlation_type, data in correlations.items():
+                    flow_text.insert("end", f"   {correlation_type.upper()}:\n")
+                    if isinstance(data, dict):
+                        for key, value in data.items():
+                            flow_text.insert("end", f"      {key}: {value}\n")
+                    elif isinstance(data, list):
+                        for item in data[:5]:
+                            flow_text.insert("end", f"      • {item}\n")
+                    flow_text.insert("end", "\n")
+            
+            # Suspicious Patterns
+            suspicious_patterns = flow_results.get('suspicious_patterns', [])
+            if suspicious_patterns:
+                flow_text.insert("end", f"🚨 SUSPICIOUS PATTERNS ({len(suspicious_patterns)}):\n")
+                for i, pattern in enumerate(suspicious_patterns[:5]):
+                    flow_text.insert("end", f"   {i+1}. {pattern.get('description', 'Unknown pattern')}\n")
+                    flow_text.insert("end", f"      Severity: {pattern.get('severity', 'Unknown')}\n")
+                    flow_text.insert("end", f"      IPs Involved: {', '.join(pattern.get('ips', []))}\n\n")
+            
+            # Flow Timing Analysis
+            timing_analysis = flow_results.get('timing_analysis', {})
+            if timing_analysis:
+                flow_text.insert("end", "⏱️ TIMING ANALYSIS:\n")
+                flow_text.insert("end", f"   Peak Traffic Time: {timing_analysis.get('peak_time', 'Unknown')}\n")
+                flow_text.insert("end", f"   Traffic Patterns: {timing_analysis.get('patterns', 'Unknown')}\n")
+                flow_text.insert("end", f"   Correlation Score: {timing_analysis.get('correlation_score', 0):.2f}\n\n")
+        else:
+            flow_text.insert("end", f"❌ Error: {flow_results['error']}")
 
         # Close button
         tk.Button(popup, text="Close", command=popup.destroy, bg="#3a3a5c", fg="white").pack(pady=10)
